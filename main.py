@@ -17,75 +17,78 @@ logger = logging.getLogger(__name__)
 
 def main():
     load_dotenv('config/.env')
-    logger.info("=" * 60)
-    logger.info("Roostoo Trading Bot Started")
+    logger.info("=" * 70)
+    logger.info("🐻 TEAMBEAR - ROOSTOO TRADING BOT")
     logger.info(f"Timestamp: {datetime.now().isoformat()}")
-    logger.info("=" * 60)
+    logger.info("=" * 70)
     
-    from src.core.api_client import RoostooClient
+    from src.core.api_client import get_balance, get_ticker, get_exchange_info, place_order
+    from src.strategies.ma_crossover_strategy import MACrossoverStrategy
+    from src.core.risk_manager import RiskManager
     
-    client = RoostooClient()
+    # Initialize components
+    risk_manager = RiskManager(initial_capital=1_000_000)
+    symbols = ['BTC/USD', 'ETH/USD', 'SOL/USD']
+    strategy = MACrossoverStrategy(symbols=symbols, short_window=5, long_window=20)
     
-    # Test 1: Server Time (no auth)
-    logger.info("Test 1: Checking server time...")
-    try:
-        server_time = client.get_server_time()
-        logger.info(f"✅ Server Time: {server_time}")
-    except Exception as e:
-        logger.error(f"❌ Server Time Failed: {e}")
-        return
+    # Get initial balance
+    logger.info("Getting account balance...")
+    balance = get_balance()
+    usd_free = balance['SpotWallet']['USD']['Free']
+    logger.info(f"💰 Available USD: ${usd_free:,.2f}")
+    risk_manager.update_capital(usd_free)
     
-    # Test 2: Exchange Info (no auth)
-    logger.info("Test 2: Getting exchange info...")
-    try:
-        exchange_info = client.get_exchange_info()
-        pairs = list(exchange_info.get('TradePairs', {}).keys())
-        logger.info(f"✅ Available Pairs: {pairs}")
-        logger.info(f"✅ Initial Wallet: {exchange_info.get('InitialWallet', {})}")
-    except Exception as e:
-        logger.error(f"❌ Exchange Info Failed: {e}")
-        return
+    logger.info("\n" + "=" * 70)
+    logger.info("✅ BOT READY - Starting trading loop...")
+    logger.info("=" * 70)
+    logger.info(f"Strategy: MA Crossover ({strategy.short_window}/{strategy.long_window})")
+    logger.info(f"Symbols: {symbols}")
+    logger.info("Press Ctrl+C to stop")
     
-    # Test 3: Balance (auth required)
-    logger.info("Test 3: Getting account balance...")
-    try:
-        balance = client.get_balance()
-        wallet = balance.get('Wallet', {})
-        logger.info(f"✅ Balance Retrieved!")
-        for currency, amounts in wallet.items():
-            logger.info(f"   {currency}: Free={amounts.get('Free', 0)}, Lock={amounts.get('Lock', 0)}")
-    except Exception as e:
-        logger.error(f"❌ Balance Failed: {e}")
-        logger.error("⚠️  Check your API keys in config/.env")
-        return
-    
-    # Test 4: Ticker (auth required)
-    logger.info("Test 4: Getting market ticker...")
-    try:
-        ticker = client.get_ticker('BTC/USD')
-        logger.info(f"✅ Ticker: {ticker}")
-    except Exception as e:
-        logger.error(f"❌ Ticker Failed: {e}")
-    
-    logger.info("=" * 60)
-    logger.info("✅ All API tests passed! Bot ready for trading.")
-    logger.info("=" * 60)
-    
-    # Main trading loop (placeholder)
-    logger.info("Starting trading loop... Press Ctrl+C to stop")
-    
+    # Main trading loop
+    loop_count = 0
     while True:
         try:
-            balance = client.get_balance()
-            total_usd = balance.get('Wallet', {}).get('USD', {}).get('Free', 0)
-            logger.info(f"Portfolio USD: ${total_usd:,.2f}")
+            loop_count += 1
+            logger.info(f"\n{'='*50}")
+            logger.info(f"[Loop {loop_count}] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info(f"{'='*50}")
+            
+            # Get updated balance
+            balance = get_balance()
+            usd_free = balance['SpotWallet']['USD']['Free']
+            risk_manager.update_capital(usd_free)
+            logger.info(f"💰 USD Balance: ${usd_free:,.2f}")
+            
+            # Check drawdown limits
+            if not risk_manager.check_daily_drawdown():
+                logger.warning("⚠️ Daily drawdown limit reached - pausing trading")
+                time.sleep(300)
+                continue
+            
+            # Generate trading signals
+            logger.info("Generating trading signals...")
+            signals = strategy.generate_signals(client=None)  # Will fix client passing
+            
+            # Execute signals
+            for signal in signals:
+                logger.info(f"Signal: {signal['action']} {signal['symbol']} @ ${signal['price']:,.2f}")
+                # TODO: Add order execution logic here
+            
+            # Wait before next loop
+            logger.info("Waiting 60 seconds...")
             time.sleep(60)
+            
         except KeyboardInterrupt:
-            logger.info("Bot stopped by user")
+            logger.info("\n🛑 Bot stopped by user")
             break
         except Exception as e:
-            logger.error(f"Loop error: {e}")
+            logger.error(f"❌ Loop error: {e}")
             time.sleep(5)
+    
+    logger.info("=" * 70)
+    logger.info("Bot shutdown complete")
+    logger.info("=" * 70)
 
 if __name__ == '__main__':
     main()
