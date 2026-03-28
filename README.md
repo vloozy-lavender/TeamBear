@@ -140,14 +140,6 @@ tests/
 
 ---
 
-## ⚠️ Current Limitations
-
-* Order execution logic is not fully implemented (`TODO`)
-* No backtesting module yet
-* No performance analytics (Sharpe, drawdown curves)
-
----
-
 ## 📈 Future Improvements
 
 * Backtesting engine
